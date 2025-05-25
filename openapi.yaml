@@ -1,0 +1,182 @@
+openapi: 3.0.3
+info:
+  title: Class Booking API
+  description: API for managing fitness classes and bookings
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/classes:
+    post:
+      summary: Create a new class
+      description: Creates a new fitness class with the specified details
+      tags:
+        - Classes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClassRequest'
+      responses:
+        '201':
+          description: Class created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Class created successfully
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  
+  /api/bookings:
+    post:
+      summary: Create a new booking
+      description: Books a class for a member on a specific date
+      tags:
+        - Bookings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Booking created successfully
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Class not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Booking conflict (e.g., class is full)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    ClassRequest:
+      type: object
+      required:
+        - name
+        - start_date
+        - end_date
+        - capacity
+      properties:
+        name:
+          type: string
+          description: Name of the class
+          example: "Test name of class"
+        start_date:
+          type: string
+          format: date-time
+          description: Start date and time of the class
+          example: "2023-08-15"
+        end_date:
+          type: string
+          format: date-time
+          description: End date and time of the class (must be after start_date)
+          example: "2023-08-15"
+        capacity:
+          type: integer
+          minimum: 1
+          description: Maximum number of members that can book the class
+          example: 20
+    
+    BookingRequest:
+      type: object
+      required:
+        - class_id
+        - member_name
+        - date
+      properties:
+        class_id:
+          type: string
+          description: Unique identifier of the class to book
+          example: "class123"
+        member_name:
+          type: string
+          description: Name of the member making the booking
+          example: "Jane Doe"
+        date:
+          type: string
+          format: date-time
+          description: Date and time of the booking
+          example: "2023-08-15"
+    
+    ValidationError:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: Name of the field that failed validation
+              message:
+                type: string
+                description: Error message explaining the validation failure
+          example:
+            - field: "capacity"
+              message: "must be greater than or equal to 1"
+            - field: "end_date"
+              message: "must be greater than or equal to StartDate"
+    
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Internal server error"
+
+tags:
+  - name: Classes
+    description: Operations related to fitness classes
+  - name: Bookings
+    description: Operations related to class bookings
