@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -18,83 +17,96 @@ import (
 	"github.com/jilani-go/glofox/internal/services"
 )
 
-type appDependencies struct {
-	cfg            *config.Config
-	router         http.Handler
-	classHandler   *handlers.ClassHandler
-	bookingHandler *handlers.BookingHandler
-}
-
-// initDependencies initializes all dependencies
-func initDependencies() appDependencies {
+func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	// Initialize repositories
-	classRepo := repository.NewInMemoryClassRepo()
-	bookingRepo := repository.NewInMemoryBookingRepo()
+	// Create repositories
+	productRepo := repository.NewInMemoryProductRepository()
+	orderRepo := repository.NewInMemoryOrderRepository(productRepo)
 
-	// Initialize services
-	classService := services.NewClassService(classRepo, bookingRepo)
-	bookingService := services.NewBookingService(bookingRepo, classRepo, classService)
-
-	// Initialize handlers with services
-	classHandler := handlers.NewClassHandler(classService)
-	bookingHandler := handlers.NewBookingHandler(bookingService)
-
-	// Setup router
-	router := api.SetupRoutes(classHandler, bookingHandler)
-
-	return appDependencies{
-		cfg:            cfg,
-		router:         router,
-		classHandler:   classHandler,
-		bookingHandler: bookingHandler,
-	}
-}
-
-// setupServer creates and configures the HTTP server
-func setupServer(deps appDependencies) *http.Server {
-	return &http.Server{
-		Addr:         fmt.Sprintf(":%s", deps.cfg.Server.Port),
-		Handler:      deps.router,
-		ReadTimeout:  deps.cfg.Server.ReadTimeout,
-		WriteTimeout: deps.cfg.Server.WriteTimeout,
-		IdleTimeout:  deps.cfg.Server.IdleTimeout,
-	}
-}
-
-// gracefulShutdown handles graceful server shutdown with a timeout
-func gracefulShutdown(server *http.Server, timeout time.Duration) {
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shutting down server...")
-
-	// Create a deadline to wait for current operations to complete
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+	// Create SQLite promo repository with optimized configuration
+	promoRepo, err := repository.NewSQLitePromoRepository(repository.SQLitePromoConfig{
+		DatabasePath:  "data/promo_codes.db",
+		BatchSize:     50000, // Insert 50k records per transaction
+		WorkerCount:   runtime.NumCPU(),
+		CreateIndexes: true, // Create indexes for faster lookups
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize promo repository: %v", err)
 	}
 
-	log.Println("Server exited properly")
-}
+	// Create services
+	productService := services.NewProductService(productRepo)
+	promoService := services.NewPromoService(promoRepo)
+	orderService := services.NewOrderService(orderRepo, productRepo)
 
-func main() {
-	deps := initDependencies()
+	// Create handlers
+	productHandler := handlers.NewProductHandler(productService)
+	orderHandler := handlers.NewOrderHandler(orderService, productService, promoService)
 
-	server := setupServer(deps)
+	// Setup routes
+	router := api.SetupRoutes(productHandler, orderHandler)
 
-	// Start server in a goroutine
+	// Override port from environment if provided
+	if envPort := os.Getenv("PORT"); envPort != "" {
+		cfg.Server.Port = envPort
+	}
+
+	// Configure HTTP server
+	server := &http.Server{
+		Addr:         ":" + cfg.Server.Port,
+		Handler:      router,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	// Channel to listen for errors coming from the listener
+	serverErrors := make(chan error, 1)
+
+	// Start the server in a goroutine
 	go func() {
-		log.Printf("Server starting on port %s...\n", deps.cfg.Server.Port)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("Error starting server: %v", err)
-		}
+		log.Printf("Server starting on port %s", cfg.Server.Port)
+		serverErrors <- server.ListenAndServe()
 	}()
 
-	// Handle graceful shutdown
-	gracefulShutdown(server, 15*time.Second)
+	// Channel to listen for interrupt/terminate signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Block until an os.Signal or an error is received
+	select {
+	case err := <-serverErrors:
+		log.Fatalf("Error starting server: %v", err)
+
+	case sig := <-shutdown:
+		log.Printf("Shutdown signal received: %v", sig)
+
+		// Create a deadline context for graceful shutdown
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Gracefully shutdown connections
+		log.Println("Shutting down server...")
+
+		// Shut down database connections
+		if err := promoRepo.Close(); err != nil {
+			log.Printf("Error closing SQLite connection: %v", err)
+		}
+
+		// Shut down HTTP server
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("Error during server shutdown: %v", err)
+			server.Close()
+		}
+
+		// Verify if the server shutdown gracefully
+		<-ctx.Done()
+		if ctx.Err() == context.DeadlineExceeded {
+			log.Println("Shutdown deadline exceeded, forcing exit")
+		} else {
+			log.Println("Server gracefully stopped")
+		}
+	}
 }

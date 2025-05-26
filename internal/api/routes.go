@@ -8,15 +8,16 @@ import (
 )
 
 // SetupRoutes initializes the API routes
-func SetupRoutes(classHandler *handlers.ClassHandler, bookingHandler *handlers.BookingHandler) http.Handler {
+func SetupRoutes(productHandler *handlers.ProductHandler, orderHandler *handlers.OrderHandler) http.Handler {
 	// Create router
 	router := mux.NewRouter()
 
-	// Class routes
-	router.HandleFunc("/api/classes", classHandler.CreateClass).Methods("POST")
+	// Product routes
+	router.HandleFunc("/product", productHandler.ListProducts).Methods("GET")
+	router.HandleFunc("/product/{productId}", productHandler.GetProduct).Methods("GET")
 
-	// Booking routes
-	router.HandleFunc("/api/bookings", bookingHandler.CreateBooking).Methods("POST")
+	// Order routes
+	router.HandleFunc("/order", orderHandler.PlaceOrder).Methods("POST")
 
 	return router
 }
