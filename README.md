@@ -1,14 +1,33 @@
-# Glofox Fitness Class Booking System
+# Promo Code Validation Service
 
-A RESTful API service for managing fitness class bookings. This system allows studio owners to create classes and members to book those classes.
+A high-performance REST API service for validating promotion codes with optimized storage and retrieval capabilities. This system validates promotion codes against multiple data sources and determines their validity based on business rules.
 
-### Features
+## Features
 
-- Create fitness classes with capacity
-- Allow members to Book classes
-- In-memory data storage (for demonstration purposes)
-- RESTful API interface
-- OpenAPI specification for API documentation
+- **Fast Promo Code Validation**: Validates codes against multiple source files simultaneously
+- **Multi-Source Validation**: Requires code presence in at least 2 of 3 data sources for validity
+- **Multiple Repository Implementations**:
+  - In-memory repository for high-speed operation
+  - SQLite repository for persistent storage with optimized configuration
+- **Concurrent Processing**: Uses Go's concurrency features for parallel validation
+- **RESTful API**: Clean API interface for integration with front-end applications
+- **Graceful Shutdown**: Proper resource cleanup and request completion on shutdown
+- **Configurable**: Easily configure server settings, database options, and performance parameters
+
+## Tech Stack
+
+- **Go 1.24**: Leverages the performance and concurrency features of Go
+- **SQLite**: Lightweight, file-based database for persistent storage
+- **gorilla/mux**: Fast and flexible HTTP router for REST endpoints
+- **go-playground/validator**: Request validation
+- **Context Support**: For proper request cancellation and timeouts
+
+## Getting Started
+
+### Prerequisites
+
+- Go 1.24.2 or higher
+- Git
 
 
 ### Prerequisites
@@ -38,60 +57,3 @@ A RESTful API service for managing fitness class bookings. This system allows st
 ## API Documentation
 
 The API is documented using OpenAPI Specification (OAS) which provides a standardized way to describe RESTful APIs. 
-
-### Using the OpenAPI Specification
-
-The project includes an `openapi.yaml` file in the root directory that contains the complete API specification. You can import the file directly in postman to play with API.
-
-### Using cURL request
- - #### Create class sample request
-      ```
-      curl --location 'http://localhost:8080/api/classes' \
-      --header 'Content-Type: application/json' \
-      --header 'Accept: application/json' \
-      --data '{
-          "name": "Gym starter",
-          "start_date": "2025-05-01",
-          "end_date": "2025-05-30",
-          "capacity": 1
-      }'
-      
-      ```
- - #### Create class sample response
-   ```
-   {
-     "id":"50d06c6f-d1cb-496e-beae-5c3d1c94a245",
-      "message":"Class created successfully"
-   }
-   
-   ```
-- #### Create Booking sample request
-
-   ```
-   curl --location 'http://localhost:8080/api/bookings' \
-   --header 'Content-Type: application/json' \
-   --header 'Accept: application/json' \
-   --data '{
-       "class_id": "50d06c6f-d1cb-496e-beae-5c3d1c94a245",
-       "member_name": "Jilani",
-       "date": "2025-05-02"
-   }'
-   ```
-- #### Create Booking sample response
-   ```
-   {
-     "id":"78fd2762-8f3a-4ea1-acb2-25fb13dbca68",
-     "message":"Booking created successfully"
-    }
-
-  
-   ```
-
-
-
-
-
-
-
-
-
